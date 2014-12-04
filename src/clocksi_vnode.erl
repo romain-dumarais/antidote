@@ -52,9 +52,6 @@
 %%      where:
 %%          partition: the partition that the vnode is responsible for.
 %%          prepared_tx: a list of prepared transactions.
-%%          committed_tx: a list of committed transactions.
-%%          active_txs_per_key: a list of the active transactions that
-%%              have updated a key (but not yet finished).
 %%          downstream_set: a list of the downstream operations that the
 %%              transactions generate.
 %%          write_set: a list of the write sets that the transactions
@@ -62,8 +59,6 @@
 %%----------------------------------------------------------------------
 -record(state, {partition,
                 prepared_tx,
-                committed_tx,
-                active_txs_per_key,
                 write_set}).
 
 %%%===================================================================
@@ -126,20 +121,12 @@ init([Partition]) ->
     PreparedTx = ets:new(list_to_atom(atom_to_list(prepared_tx) ++
                                           integer_to_list(Partition)),
                          [set, {write_concurrency, true}]),
-    CommittedTx = ets:new(list_to_atom(atom_to_list(committed_tx) ++
-                                           integer_to_list(Partition)),
-                          [set, {write_concurrency, true}]),
-    ActiveTxsPerKey = ets:new(list_to_atom(atom_to_list(active_txs_per_key)
-                                           ++ integer_to_list(Partition)),
-                              [bag, {write_concurrency, true}]),
     WriteSet = ets:new(list_to_atom(atom_to_list(write_set) ++
                                         integer_to_list(Partition)),
                        [duplicate_bag, {write_concurrency, true}]),
     {ok, #state{partition=Partition,
                 prepared_tx=PreparedTx,
-                committed_tx=CommittedTx,
-                write_set=WriteSet,
-                active_txs_per_key=ActiveTxsPerKey}}.
+                write_set=WriteSet}}.
 
 %% @doc starts a read_fsm to handle a read operation.
 handle_command({read_data_item, Txn, Key, Type}, Sender,
@@ -153,8 +140,7 @@ handle_command({read_data_item, Txn, Key, Type}, Sender,
 %% @doc handles an update operation at a Leader's partition
 handle_command({update_data_item, Txn, Key, Type, Op}, Sender,
                #state{partition=Partition,
-                      write_set=WriteSet,
-                      active_txs_per_key=ActiveTxsPerKey}=State) ->
+                      write_set=WriteSet}=State) ->
     TxId = Txn#transaction.txn_id,
     LogRecord = #log_record{tx_id=TxId, op_type=update,
                             op_payload={Key, Type, Op}},
@@ -163,7 +149,6 @@ handle_command({update_data_item, Txn, Key, Type, Op}, Sender,
     Result = logging_vnode:append(Node,LogId,LogRecord),
     case Result of
         {ok, _} ->
-            true = ets:insert(ActiveTxsPerKey, {Key, Type, TxId}),
             true = ets:insert(WriteSet, {TxId, {Key, Type, Op}}),
             {ok, _Pid} = clocksi_updateitem_fsm:start_link(
                            Sender,
@@ -176,14 +161,9 @@ handle_command({update_data_item, Txn, Key, Type, Op}, Sender,
 
 handle_command({prepare, Transaction}, _Sender,
                State = #state{partition=_Partition,
-                              committed_tx=CommittedTx,
-                              active_txs_per_key=ActiveTxPerKey,
-                              prepared_tx=PreparedTx,
-                              write_set=WriteSet}) ->
+               				  write_set=WriteSet,
+                              prepared_tx=PreparedTx}) ->
     TxId = Transaction#transaction.txn_id,
-    TxWriteSet = ets:lookup(WriteSet, TxId),
-    case certification_check(TxId, TxWriteSet, CommittedTx, ActiveTxPerKey) of
-        true ->
             PrepareTime = now_milisec(erlang:now()),
             LogRecord = #log_record{tx_id=TxId,
                                     op_type=prepare,
@@ -204,16 +184,12 @@ handle_command({prepare, Transaction}, _Sender,
                 _ -> 
                     {reply, {error, no_tx_record}, State}
             end;
-        false ->
-            {reply, abort, State}
-    end;
 
 %% TODO: sending empty writeset to clocksi_downstream_generatro
 %% Just a workaround, need to delete downstream_generator_vnode
 %% eventually.
 handle_command({commit, Transaction, TxCommitTime}, _Sender,
                #state{partition=_Partition,
-                      committed_tx=CommittedTx,
                       write_set=WriteSet} = State) ->
     TxId = Transaction#transaction.txn_id,
     DcId = dc_utilities:get_my_dc_id(),
@@ -228,7 +204,6 @@ handle_command({commit, Transaction, TxCommitTime}, _Sender,
             [Node] = log_utilities:get_preflist_from_key(Key),
             case logging_vnode:append(Node,LogId,LogRecord) of
                 {ok, _} ->
-                    true = ets:insert(CommittedTx, {TxId, TxCommitTime}),
                     case update_materializer(Updates, Transaction, TxCommitTime) of
                         ok ->
                             clean_and_notify(TxId, Key, State),
@@ -318,8 +293,7 @@ terminate(_Reason, _State) ->
 %%      a. ActiteTxsPerKey,
 %%      b. PreparedTx
 %%
-clean_and_notify(TxId, _Key, #state{active_txs_per_key=_ActiveTxsPerKey,
-                                    prepared_tx=PreparedTx,
+clean_and_notify(TxId, _Key, #state{prepared_tx=PreparedTx,
                                     write_set=WriteSet}) ->
     true = ets:match_delete(PreparedTx, {active, {TxId, '_'}}),
     true = ets:delete(WriteSet, TxId).
@@ -327,38 +301,7 @@ clean_and_notify(TxId, _Key, #state{active_txs_per_key=_ActiveTxsPerKey,
 %% @doc converts a tuple {MegaSecs,Secs,MicroSecs} into microseconds
 now_milisec({MegaSecs, Secs, MicroSecs}) ->
     (MegaSecs * 1000000 + Secs) * 1000000 + MicroSecs.
-
-%% @doc Performs a certification check when a transaction wants to move
-%%      to the prepared state.
-certification_check(_, [], _, _) ->
-    true;
-certification_check(TxId, [H|T], CommittedTx, ActiveTxPerKey) ->
-    {_, {Key, _Type, _}} = H,
-    TxsPerKey = ets:lookup(ActiveTxPerKey, Key),
-    case check_keylog(TxId, TxsPerKey, CommittedTx) of
-        true ->
-            false;
-        false ->
-            certification_check(TxId, T, CommittedTx, ActiveTxPerKey)
-    end.
-
-check_keylog(_, [], _) ->
-    false;
-check_keylog(TxId, [H|T], CommittedTx)->
-    {_Key, _Type, ThisTxId}=H,
-    case ThisTxId > TxId of
-        true ->
-            CommitInfo = ets:lookup(CommittedTx, ThisTxId),
-            case CommitInfo of
-                [{_, _CommitTime}] ->
-                    true;
-                [] ->
-                    check_keylog(TxId, T, CommittedTx)
-            end;
-        false ->
-            check_keylog(TxId, T, CommittedTx)
-    end.
-
+    
 -spec update_materializer(DownstreamOps :: [{term(),{key(),type(),op()}}],
                           Transaction::#transaction{},TxCommitTime:: {term(), term()}) ->
                                  ok | error.
@@ -383,3 +326,4 @@ update_materializer(DownstreamOps, Transaction, TxCommitTime) ->
         _ ->
             error
     end.
+
