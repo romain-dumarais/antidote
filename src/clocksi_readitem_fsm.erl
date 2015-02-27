@@ -82,7 +82,7 @@ check_clock(timeout, SD0=#state{transaction=Transaction}) ->
     Time = clocksi_vnode:now_microsec(erlang:now()),
     case T_TS > Time of
         true ->
-	    SleepMiliSec = (T_TS - Time) div 1000 + 1,
+	        SleepMiliSec = (T_TS - Time) div 1000 + 1,
             timer:sleep(SleepMiliSec),
             {next_state, waiting1, SD0, 0};
         false ->

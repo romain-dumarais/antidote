@@ -134,7 +134,6 @@ execute_batch_ops(timeout, SD=#state{from = From,
         end
 	end.
 
-
 %% =============================================================================
 
 handle_info(_Info, _StateName, StateData) ->
