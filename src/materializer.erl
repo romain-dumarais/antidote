@@ -44,8 +44,6 @@ update_snapshot(Key, Type, Snapshot, [LogEntry|Rest]) ->
                 {Key, Type} ->
                     OpParam = Payload#payload.op_param,
                     Actor = Payload#payload.actor,
-                    lager:info("OpParam: ~p, Actor: ~p and Snapshot: ~p",
-                               [OpParam, Actor, Snapshot]),
                     {ok, Value} = Type:update(OpParam, Actor, Snapshot),
                     Value;
                 _ ->
@@ -53,7 +51,7 @@ update_snapshot(Key, Type, Snapshot, [LogEntry|Rest]) ->
             end,
             update_snapshot(Key, Type, NewSnapshot, Rest);
         _ ->
-            lager:info("Unexpected log record: ~p, Actor: ~p and Snapshot: ~p",
+            lager:error("Unexpected log record: ~p, Actor: ~p and Snapshot: ~p",
                        [LogEntry]),
             {error, unexpected_format, LogEntry}
     end.

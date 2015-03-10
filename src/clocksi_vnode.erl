@@ -154,7 +154,6 @@ handle_command({read_data_item, Txn, Key, Type, Updates}, Sender,
     Vnode = {Partition, node()},
     {ok, _Pid} = clocksi_readitem_fsm:start_link(Vnode, Sender, Txn,
                                                  Key, Type, Updates),
-    lager:info("Started read itme fsm~n"),
     {noreply, State};
 
 handle_command({pre_prepare, Transaction, Updates, TxType}, Sender,

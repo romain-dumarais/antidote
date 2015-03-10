@@ -96,7 +96,7 @@ update_clock(Partition, Dc_id, Timestamp) ->
             {ok, Clock} ->
                 {ok, Clock};
             {error, Reason} ->
-                lager:info("Update vector clock failed: ~p",[Reason]),
+                lager:error("Update vector clock failed: ~p",[Reason]),
                 {error, Reason}
         end
     catch
