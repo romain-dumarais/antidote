@@ -328,7 +328,7 @@ prepare(Transaction, WriteSet, _CommittedTx, _ActiveTxPerKey, PreparedTx, Prepar
                             op_type=prepare,
                             op_payload=PrepareTime},
     true = ets:insert(PreparedTx, {TxId, PrepareTime}),
-    true = ets:insert(PreparedTimeSet, PrepareTime),
+    true = ets:insert(PrepareTimeSet, PrepareTime),
     lager:info("Adding tx: ~w time: ~w",[TxId, PrepareTime]),
     Updates = ets:lookup(WriteSet, TxId),
     case Updates of 
@@ -382,11 +382,12 @@ commit(Transaction, TxCommitTime, WriteSet, _CommittedTx, State)->
 %%
 clean_and_notify(TxId, _Key, #state{active_txs_per_key=_ActiveTxsPerKey,
                                     prepared_tx=PreparedTx,
+                                    prepare_time_set=PrepareTimeSet,
                                     write_set=WriteSet}) ->
     [{_,PrepareTime}] = ets:lookup(PreparedTx, TxId),
     lager:info("Deleting tx: ~w time: ~w",[TxId, PrepareTime]),
     true = ets:delete(PreparedTx, TxId),
-    true = ets:delete(PreparedTimeSet, PrepareTime),
+    true = ets:delete(PrepareTimeSet, PrepareTime),
     true = ets:delete(WriteSet, TxId).
 
 %% @doc converts a tuple {MegaSecs,Secs,MicroSecs} into microseconds

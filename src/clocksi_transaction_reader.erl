@@ -198,7 +198,7 @@ get_sorted_commit_records(Commitrecords) ->
 get_stable_time(Node, Prev_stable_time) ->
     case riak_core_vnode_master:sync_command(
            Node, {get_first_prepared}, ?CLOCKSI_MASTER) of
-        {ok, Active_txns} ->
+        {ok, TimeStamp} ->
 	    lager:info("Current time: ~w prepared:~w", [now_milisec(erlang:now()), TimeStamp]),
             TimeStamp;
             %lists:foldl(fun({_,{_TxId, Snapshot_time}}, Min_time) ->
