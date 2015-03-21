@@ -279,7 +279,12 @@ handle_command({abort, Transaction}, _Sender,
 %% @doc Return active transactions in prepare state with their preparetime
 handle_command({get_first_prepared}, _Sender,
                #state{prepare_time_set=PrepareTimeSet, partition=_Partition} = State) ->
-    FirstPrepared = ets:first(PrepareTimeSet),
+    FirstPrepared = case ets:first(PrepareTimeSet) of
+                            '$end_of_table' ->
+                                now_milisec(erlang:now());
+                             AnyOther ->
+                                AnyOther
+                    end,
     {reply, {ok, FirstPrepared}, State};
 
 handle_command(_Message, _Sender, State) ->
