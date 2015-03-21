@@ -62,7 +62,6 @@
 %%----------------------------------------------------------------------
 -record(state, {partition,
                 prepared_tx,
-		prepare_time_set,
                 committed_tx,
                 active_txs_per_key,
                 write_set}).
@@ -134,7 +133,7 @@ abort(ListofNodes, TxId) ->
 init([Partition]) ->
     PreparedTx = ets:new(list_to_atom(atom_to_list(prepared_tx) ++
                                           integer_to_list(Partition)),
-                         [ordered_set, {write_concurrency, true}]),
+                         [ordered_set, {write_concurrency, true}, {read_concurrency, true}]),
     CommittedTx = ets:new(list_to_atom(atom_to_list(committed_tx) ++
                                            integer_to_list(Partition)),
                           [set, {write_concurrency, true}]),
@@ -380,8 +379,8 @@ commit(Transaction, TxCommitTime, WriteSet, _CommittedTx, State)->
 clean_and_notify(TxId, _Key, #state{active_txs_per_key=_ActiveTxsPerKey,
                                     prepared_tx=PreparedTx,
                                     write_set=WriteSet}) ->
-    [[PrepareTime]] = ets:match(PreparedTx, {'$1',TxId}),
-    true = ets:delete(PreparedTx, PrepareTime),
+    true = ets:match_delete(PreparedTx, {'_',TxId}),
+    %true = ets:delete(PreparedTx, PrepareTime),
     true = ets:delete(WriteSet, TxId).
 
 %% @doc converts a tuple {MegaSecs,Secs,MicroSecs} into microseconds
