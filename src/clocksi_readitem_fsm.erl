@@ -162,17 +162,19 @@ get_stable_time(Key) ->
     Preflist = log_utilities:get_preflist_from_key(Key),
     Node = hd(Preflist),
     case riak_core_vnode_master:sync_command(
-           Node, {get_active_txns}, ?CLOCKSI_MASTER) of
-        {ok, Active_txns} ->
-            lists:foldl(fun({_,{_TxId, Snapshot_time}}, Min_time) ->
-                                case Min_time > Snapshot_time of
-                                    true ->
-                                        Snapshot_time;
-                                    false ->
-                                        Min_time
-                                end
-                        end,
-                        now_milisec(erlang:now()),
-                        Active_txns);
+           Node, {get_first_prepared}, ?CLOCKSI_MASTER) of
+        {ok, TimeStamp} ->
+	    lager:info("Current time: ~w prepared:~w", [now_milisec(erlang:now()), TimeStamp]),
+	    TimeStamp;
+            %lists:foldl(fun({_,{_TxId, Snapshot_time}}, Min_time) ->
+            %                    case Min_time > Snapshot_time of
+            %                        true ->
+            %                            Snapshot_time;
+            %                        false ->
+            %                            Min_time
+            %                    end
+            %            end,
+            %            now_milisec(erlang:now()),
+            %            Active_txns);
         _ -> 0
     end.

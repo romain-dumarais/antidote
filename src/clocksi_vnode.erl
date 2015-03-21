@@ -62,6 +62,7 @@
 %%----------------------------------------------------------------------
 -record(state, {partition,
                 prepared_tx,
+		prepare_time_set,
                 committed_tx,
                 active_txs_per_key,
                 write_set}).
@@ -134,6 +135,9 @@ init([Partition]) ->
     PreparedTx = ets:new(list_to_atom(atom_to_list(prepared_tx) ++
                                           integer_to_list(Partition)),
                          [set, {write_concurrency, true}]),
+    PrepareTimeSet = ets:new(list_to_atom(atom_to_list(prepare_time_set) ++
+                                           integer_to_list(Partition)),
+                         [ordered_set, {write_concurrency, true}]), 
     CommittedTx = ets:new(list_to_atom(atom_to_list(committed_tx) ++
                                            integer_to_list(Partition)),
                           [set, {write_concurrency, true}]),
@@ -145,6 +149,7 @@ init([Partition]) ->
                        [duplicate_bag, {write_concurrency, true}]),
     {ok, #state{partition=Partition,
                 prepared_tx=PreparedTx,
+		prepare_time_set=PrepareTimeSet,
                 committed_tx=CommittedTx,
                 write_set=WriteSet,
                 active_txs_per_key=ActiveTxsPerKey}}.
@@ -187,9 +192,10 @@ handle_command({single_commit, Transaction}, _Sender,
                               committed_tx=CommittedTx,
                               active_txs_per_key=ActiveTxPerKey,
                               prepared_tx=PreparedTx,
+                              prepare_time_set=PrepareTimeSet,
                               write_set=WriteSet}) ->
     PrepareTime = now_milisec(erlang:now()),
-    Result = prepare(Transaction, WriteSet, CommittedTx, ActiveTxPerKey, PreparedTx, PrepareTime),
+    Result = prepare(Transaction, WriteSet, CommittedTx, ActiveTxPerKey, PreparedTx, PrepareTime, PrepareTimeSet),
     case Result of
         {ok, _} ->
             ResultCommit = commit(Transaction, PrepareTime, WriteSet, PreparedTx, State),
@@ -214,11 +220,12 @@ handle_command({single_commit, Transaction}, _Sender,
 handle_command({prepare, Transaction}, _Sender,
                State = #state{partition=_Partition,
                               committed_tx=CommittedTx,
+			      prepare_time_set=PrepareTimeSet,
                               active_txs_per_key=ActiveTxPerKey,
                               prepared_tx=PreparedTx,
                               write_set=WriteSet}) ->
     PrepareTime = now_milisec(erlang:now()),
-    Result = prepare(Transaction, WriteSet, CommittedTx, ActiveTxPerKey, PreparedTx, PrepareTime),
+    Result = prepare(Transaction, WriteSet, CommittedTx, ActiveTxPerKey, PreparedTx, PrepareTime, PrepareTimeSet),
     case Result of
         {ok, _} ->
             {reply, {prepared, PrepareTime}, State};
@@ -270,10 +277,10 @@ handle_command({abort, Transaction}, _Sender,
     end;
 
 %% @doc Return active transactions in prepare state with their preparetime
-handle_command({get_active_txns}, _Sender,
-               #state{prepared_tx=Prepared, partition=_Partition} = State) ->
-    ActiveTxs = ets:lookup(Prepared, active),
-    {reply, {ok, ActiveTxs}, State};
+handle_command({get_first_prepared}, _Sender,
+               #state{prepare_time_set=PrepareTimeSet, partition=_Partition} = State) ->
+    FirstPrepared = ets:first(PrepareTimeSet),
+    {reply, {ok, FirstPrepared}, State};
 
 handle_command(_Message, _Sender, State) ->
     {noreply, State}.
@@ -315,12 +322,14 @@ terminate(_Reason, _State) ->
 %%% Internal Functions
 %%%===================================================================
 %% @doc Executes the prepare phase of this partition
-prepare(Transaction, WriteSet, _CommittedTx, _ActiveTxPerKey, PreparedTx, PrepareTime)->
+prepare(Transaction, WriteSet, _CommittedTx, _ActiveTxPerKey, PreparedTx, PrepareTime, PrepareTimeSet)->
     TxId = Transaction#transaction.txn_id,
     LogRecord = #log_record{tx_id=TxId,
                             op_type=prepare,
                             op_payload=PrepareTime},
-    true = ets:insert(PreparedTx, {active, {TxId, PrepareTime}}),
+    true = ets:insert(PreparedTx, {TxId, PrepareTime}),
+    true = ets:insert(PreparedTimeSet, PrepareTime),
+    lager:info("Adding tx: ~w time: ~w",[TxId, PrepareTime]),
     Updates = ets:lookup(WriteSet, TxId),
     case Updates of 
         [{_, {Key, _Type, {_Op, _Actor}}} | _Rest] -> 
@@ -374,7 +383,10 @@ commit(Transaction, TxCommitTime, WriteSet, _CommittedTx, State)->
 clean_and_notify(TxId, _Key, #state{active_txs_per_key=_ActiveTxsPerKey,
                                     prepared_tx=PreparedTx,
                                     write_set=WriteSet}) ->
-    true = ets:match_delete(PreparedTx, {active, {TxId, '_'}}),
+    [{_,PrepareTime}] = ets:lookup(PreparedTx, TxId),
+    lager:info("Deleting tx: ~w time: ~w",[TxId, PrepareTime]),
+    true = ets:delete(PreparedTx, TxId),
+    true = ets:delete(PreparedTimeSet, PrepareTime),
     true = ets:delete(WriteSet, TxId).
 
 %% @doc converts a tuple {MegaSecs,Secs,MicroSecs} into microseconds

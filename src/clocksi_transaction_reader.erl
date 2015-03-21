@@ -197,18 +197,20 @@ get_sorted_commit_records(Commitrecords) ->
 %%      No new updates with smaller timestamp will occur in future.
 get_stable_time(Node, Prev_stable_time) ->
     case riak_core_vnode_master:sync_command(
-           Node, {get_active_txns}, ?CLOCKSI_MASTER) of
+           Node, {get_first_prepared}, ?CLOCKSI_MASTER) of
         {ok, Active_txns} ->
-            lists:foldl(fun({_,{_TxId, Snapshot_time}}, Min_time) ->
-                                case Min_time > Snapshot_time of
-                                    true ->
-                                        Snapshot_time;
-                                    false ->
-                                        Min_time
-                                end
-                        end,
-                        now_milisec(erlang:now()),
-                        Active_txns);
+	    lager:info("Current time: ~w prepared:~w", [now_milisec(erlang:now()), TimeStamp]),
+            TimeStamp;
+            %lists:foldl(fun({_,{_TxId, Snapshot_time}}, Min_time) ->
+            %                    case Min_time > Snapshot_time of
+            %                        true ->
+            %                            Snapshot_time;
+            %                        false ->
+            %                            Min_time
+            %                    end
+            %            end,
+            %            now_milisec(erlang:now()),
+            %            Active_txns);
         _ -> Prev_stable_time
     end.
 
