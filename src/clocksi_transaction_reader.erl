@@ -199,7 +199,6 @@ get_stable_time(Node, Prev_stable_time) ->
     case riak_core_vnode_master:sync_command(
            Node, {get_first_prepared}, ?CLOCKSI_MASTER) of
         {ok, TimeStamp} ->
-	    lager:info("Current time: ~w prepared:~w", [now_milisec(erlang:now()), TimeStamp]),
             TimeStamp;
             %lists:foldl(fun({_,{_TxId, Snapshot_time}}, Min_time) ->
             %                    case Min_time > Snapshot_time of
@@ -214,8 +213,6 @@ get_stable_time(Node, Prev_stable_time) ->
         _ -> Prev_stable_time
     end.
 
-now_milisec({MegaSecs,Secs,MicroSecs}) ->
-    (MegaSecs*1000000 + Secs)*1000000 + MicroSecs.
 
 %%@doc Add updates in writeset ot Pending operations to process downstream
 add_to_pending_operations(Pending, Commitrecords, Ops, DcId) ->

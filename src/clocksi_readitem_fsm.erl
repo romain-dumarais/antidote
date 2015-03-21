@@ -96,6 +96,7 @@ waiting1(timeout, SDO=#state{key=Key, transaction=Transaction}) ->
     SnapshotTime = TxId#tx_id.snapshot_time,
     case LocalClock > SnapshotTime of
         false ->
+	    lager:info("Has to wait more ~w: ~w", [LocalClock, SnapshotTime]),
             {next_state, waiting1, SDO, 1};
         true ->
             {next_state, return, SDO, 0}
@@ -164,7 +165,6 @@ get_stable_time(Key) ->
     case riak_core_vnode_master:sync_command(
            Node, {get_first_prepared}, ?CLOCKSI_MASTER) of
         {ok, TimeStamp} ->
-	    lager:info("Current time: ~w prepared:~w", [now_milisec(erlang:now()), TimeStamp]),
 	    TimeStamp;
             %lists:foldl(fun({_,{_TxId, Snapshot_time}}, Min_time) ->
             %                    case Min_time > Snapshot_time of
