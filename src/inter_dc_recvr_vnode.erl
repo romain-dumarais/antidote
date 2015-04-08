@@ -82,6 +82,7 @@ store_updates(Transactions) ->
 fetch_stale_statistics() ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
     AllPartitions = riak_core_ring:all_owners(Ring),
+    lager:info("Get all partitions: ~w ~n", [AllPartitions]),
     {TotalStale, TotalCnt} = lists:foldl(fun(Node, {Sum, Cnt}) -> 
                                         {ok, {Stale, Num}}= riak_core_vnode_master:sync_command(Node,
                                             {get_stale_statistics}, inter_dc_recvr_vnode_master),
