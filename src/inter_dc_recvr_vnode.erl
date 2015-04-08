@@ -29,6 +29,7 @@
 -export([start_vnode/1,
          %%API begin
          store_updates/1,
+         fetch_stale_statistics/0,
          %%API end
          init/1,
          terminate/2,
@@ -43,6 +44,7 @@
          encode_handoff_item/2,
          handle_coverage/4,
          handle_exit/3]).
+
 
 start_vnode(I) ->
     riak_core_vnode_master:get_vnode_pid(I, ?MODULE).
@@ -77,6 +79,17 @@ store_updates(Transactions) ->
                                    inter_dc_recvr_vnode_master),
     ok.
 
+fetch_stale_statistics() ->
+    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
+    AllPartitions = riak_core_ring:all_owners(Ring),
+    {TotalStale, TotalCnt} = lists:foldl(fun(Node, {Sum, Cnt}) -> 
+                                        {ok, {Stale, Num}}= riak_core_vnode_master:sync_command(Node,
+                                            {get_stale_statistics}, inter_dc_recvr_vnode_master),
+                                        lager:info("Got statistics ~w ~w", [Stale, Num]),
+                                        NewSum = Sum + Stale, NewCnt = Num + Cnt, {NewSum, NewCnt} end, 
+                                    {0,0}, AllPartitions),
+    large:info("Stale ~w, Cnt ~w", [TotalStale, TotalCnt]).
+
 store_update(Node, Transaction) ->
     riak_core_vnode_master:sync_command(Node,
                                         {store_update, Transaction},
@@ -109,6 +122,11 @@ handle_command({store_update, Transaction}, _Sender, State) ->
                        Transaction, State),
     ok = dets:insert(State#recvr_state.statestore, {recvr_state, NewState}),
     {reply, ok, NewState};
+
+handle_command({get_stale_statistics}, _Sender, State) ->
+    StaleSum = State#recvr_state.stale_sum,
+    ProcessedNum = State#recvr_state.processed_num,
+    {reply, {ok, {StaleSum, ProcessedNum}}, State};
 
 handle_command({process_queue}, _Sender, State) ->
     {ok, NewState} = inter_dc_repl_update:process_queue(State),

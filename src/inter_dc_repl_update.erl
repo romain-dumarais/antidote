@@ -43,10 +43,11 @@ init_state(Partition) ->
                      #recvr_state{}) ->
                             {ok, #recvr_state{}}.
 enqueue_update(Transaction,
-               State = #recvr_state{recQ = RecQ}) ->
-    {_,{FromDC, _CommitTime},_,_} = Transaction,
+               State = #recvr_state{recQ = RecQ, pending_ver = PendingVer}) ->
+    {_,{FromDC, CommitTime},_,_} = Transaction,
+    PendingVerNew = stale_utilities:add_pending(FromDC, CommitTime, PendingVer),
     RecQNew = enqueue(FromDC, Transaction, RecQ),
-    {ok, State#recvr_state{recQ = RecQNew}}.
+    {ok, State#recvr_state{recQ = RecQNew, pending_ver = PendingVerNew}}.
 
 %% Process one transaction from Q for each DC each Q.
 %% This method must be called repeatedly
@@ -151,7 +152,8 @@ check_and_update(SnapshotTime, Localclock, Transaction,
               vectorclock_vnode_master),
             riak_core_vnode_master:command({Partition, node()}, {process_queue},
                                            inter_dc_recvr_vnode_master),
-            NewState;
+            {ok, NewState1} = stale_utilities:remove_pending(NewState),
+            NewState1;
         false ->
             lager:debug("Dep not satisfied ~p", [Transaction]),
             StateData
@@ -172,7 +174,7 @@ check_dep(DepV, Localclock) ->
 %%Set a new value to the key.
 set(Key, Value, Orddict) ->
     orddict:update(Key, fun(_Old) -> Value end, Value, Orddict).
-
+                    
 %%Put a value to the Queue corresponding to Dc in RecQ orddict
 enqueue(Dc, Data, RecQ) ->
     case orddict:find(Dc, RecQ) of
@@ -184,6 +186,8 @@ enqueue(Dc, Data, RecQ) ->
             Q2 = queue:in(Data,Q),
             set(Dc, Q2, RecQ)
     end.
+
+
 
 now_millisec({MegaSecs, Secs, MicroSecs}) ->
     (MegaSecs * 1000000 + Secs) * 1000000 + MicroSecs.
