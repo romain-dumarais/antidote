@@ -86,8 +86,8 @@ fetch_stale_statistics() ->
     {TotalStale, TotalCnt} = lists:foldl(fun(Node, {Sum, Cnt}) -> 
                                         {ok, {Stale, Num}}= riak_core_vnode_master:sync_command(Node,
                                             {get_stale_statistics}, inter_dc_recvr_vnode_master),
-                                        lager:info("Got statistics ~w ~w", [Stale, Num]),
-                                        NewSum = Sum + Stale, NewCnt = Num + Cnt, {NewSum, NewCnt} end, 
+                                        io:format("Got statistics ~w ~w", [Stale, Num]),
+                                        {Sum + Stale, Cnt + Num}  end, 
                                     {0,0}, AllPartitions),
     io:format("Stale ~w, Cnt ~w", [TotalStale, TotalCnt]).
 
