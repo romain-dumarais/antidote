@@ -34,6 +34,9 @@
 init_state(Partition) ->
     {ok, #recvr_state{lastRecvd = orddict:new(), %% stores last OpId received
                       lastCommitted = orddict:new(),
+                      pending_ver = orddict:new(),
+                      stale_sum = 0,
+                      processed_num = 0,
                       recQ = orddict:new(),
                       partition=Partition}
     }.
