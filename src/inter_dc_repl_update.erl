@@ -81,7 +81,7 @@ process_q_dc(Dc, DcQ, StateData=#recvr_state{lastCommitted = LastCTS,
             Localclock = vectorclock:set_clock_of_dc(
                            Dc, 0,
                            vectorclock:set_clock_of_dc(
-                             LocalDc, now_millisec(erlang:now()), LC)),
+                             LocalDc, clocksi_vnode:now_microsec(erlang:now()), LC)),
             case orddict:find(Dc, LastCTS) of  % Check for duplicate
                 {ok, CTS} ->
                     if Ts >= CTS ->
@@ -171,8 +171,7 @@ finish_update_dc(Dc, DcQ, Cts,
 
 %% Checks depV against the committed timestamps
 check_dep(DepV, Localclock) ->
-    Result = vectorclock:ge(Localclock, DepV),
-    Result.
+    vectorclock:ge(Localclock, DepV).
 
 %%Set a new value to the key.
 set(Key, Value, Orddict) ->
@@ -192,5 +191,3 @@ enqueue(Dc, Data, RecQ) ->
 
 
 
-now_millisec({MegaSecs, Secs, MicroSecs}) ->
-    (MegaSecs * 1000000 + Secs) * 1000000 + MicroSecs.

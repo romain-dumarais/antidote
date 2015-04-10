@@ -38,7 +38,7 @@ set(Key, Value, Orddict) ->
 
 %%Add pending
 add_pending(Dc, CommitTime, PendingVer) ->
-    lager:info("Adding pending commit: committime ~w now ~w ~n", [CommitTime, now_millisec(erlang:now())]),
+    lager:info("Adding pending commit: committime ~w now ~w ~n", [CommitTime, now_microsec(erlang:now())]),
     case orddict:find(Dc, PendingVer) of
         {ok, Q} ->
             Q2 = queue:in(CommitTime, Q),
@@ -56,7 +56,7 @@ remove_pending(StateData)->
     PendingVer = StateData#recvr_state.pending_ver,
     StaleSum = StateData#recvr_state.stale_sum,
     ProcessedNum = StateData#recvr_state.processed_num,
-    CurrentTime = now_millisec(erlang:now()),
+    CurrentTime = clocksi_vnode:now_microsec(erlang:now()),
     {ok, StableSnapshot} = riak_core_vnode_master:sync_command(
                             {Partition,node()}, get_stable_snapshot,
                              vectorclock_vnode_master),
@@ -95,8 +95,6 @@ remove_pending_until(Snapshot, CurrentTime, Q, StaleSum, Num) ->
     end.
 
 
-now_millisec({MegaSecs, Secs, MicroSecs}) ->
-    (MegaSecs * 1000000 + Secs) * 1000000 + MicroSecs.
 
 -ifdef(TEST).
 
