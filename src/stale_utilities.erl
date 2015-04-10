@@ -38,7 +38,7 @@ set(Key, Value, Orddict) ->
 
 %%Add pending
 add_pending(Dc, CommitTime, PendingVer) ->
-    lager:info("Add pending ~w ~w", [Dc, CommitTime]),
+    lager:info("Adding pending commit: committime ~w now ~w ~n", [CommitTime, now_millisec(erlang:now())]),
     case orddict:find(Dc, PendingVer) of
         {ok, Q} ->
             Q2 = queue:in(CommitTime, Q),
@@ -60,7 +60,6 @@ remove_pending(StateData)->
     {ok, StableSnapshot} = riak_core_vnode_master:sync_command(
                             {Partition,node()}, get_stable_snapshot,
                              vectorclock_vnode_master),
-    lager:info("Remove pending for stable ~w", [StableSnapshot]),
     {NewPendingVer, NewStaleSum, NewProcessedNum} = remove_pending(PendingVer, StaleSum, ProcessedNum, 
                                                                     StableSnapshot, CurrentTime),
     StateData#recvr_state{pending_ver=NewPendingVer, stale_sum=NewStaleSum, processed_num=NewProcessedNum}.
@@ -87,6 +86,7 @@ remove_pending_until(Snapshot, CurrentTime, Q, StaleSum, Num) ->
             E = queue:head(Q),
             case E =< Snapshot of
                 true ->
+                    lager:info("Removing pending commit: committime ~w currenttime ~w ~n", [E, CurrentTime]),
                     remove_pending_until(Snapshot, CurrentTime, queue:drop(Q),
                         StaleSum+CurrentTime-E, Num+1);
                 false ->

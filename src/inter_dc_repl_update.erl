@@ -150,12 +150,12 @@ check_and_update(SnapshotTime, Localclock, Transaction,
             {ok, NewState} = finish_update_dc(
                                Dc, DcQ, Ts, StateData),
             {ok, _} = vectorclock:update_clock(Partition, Dc, Ts),
+            NewState1 = stale_utilities:remove_pending(NewState),
             riak_core_vnode_master:command(
               {Partition,node()}, calculate_stable_snapshot,
               vectorclock_vnode_master),
             riak_core_vnode_master:command({Partition, node()}, {process_queue},
                                            inter_dc_recvr_vnode_master),
-            {ok, NewState1} = stale_utilities:remove_pending(NewState),
             NewState1;
         false ->
             lager:debug("Dep not satisfied ~p", [Transaction]),

@@ -86,10 +86,11 @@ fetch_stale_statistics() ->
     {TotalStale, TotalCnt} = lists:foldl(fun(Node, {Sum, Cnt}) -> 
                                         {ok, {Stale, Num}}= riak_core_vnode_master:sync_command(Node,
                                             {get_stale_statistics}, inter_dc_recvr_vnode_master),
-                                        io:format("Got statistics ~w ~w", [Stale, Num]),
+                                        io:format("Got statistics ~w ~w ~n", [Stale, Num]),
                                         {Sum + Stale, Cnt + Num}  end, 
                                     {0,0}, AllPartitions),
-    io:format("Stale ~w, Cnt ~w", [TotalStale, TotalCnt]).
+    AvgStale = (TotalStale div TotalCnt) div 1000000,
+    io:format("Stale ~w, Cnt ~w , Avg stale ~w ~n", [TotalStale, TotalCnt, AvgStale]).
 
 store_update(Node, Transaction) ->
     riak_core_vnode_master:sync_command(Node,
