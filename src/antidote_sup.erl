@@ -73,6 +73,11 @@ init(_Args) ->
                             permanent, 5000, supervisor,
                             [clockSI_interactive_tx_coord_sup]},
 
+    MaterializerSup = {materializer_sup,
+                    {materializer_sup, start_link, []},
+		       permanent, 5000, supervisor, [materializer_sup]},
+
+
     VectorClockMaster = {vectorclock_vnode_master,
                          {riak_core_vnode_master,  start_link,
                           [vectorclock_vnode]},
@@ -93,6 +98,7 @@ init(_Args) ->
        ClockSIMaster,
        ClockSIsTxCoordSup,
        ClockSIiTxCoordSup,
+       MaterializerSup,
        InterDcRepMaster,
        InterDcRecvrMaster,
        InterDcManager,
