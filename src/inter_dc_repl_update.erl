@@ -149,7 +149,7 @@ check_and_update(SnapshotTime, Localclock, Transaction,
             %%TODO add error handling if append failed
             {ok, NewState} = finish_update_dc(
                                Dc, DcQ, Ts, StateData),
-            {ok, _} = vectorclock:update_clock(Partition, Dc, Ts),
+            ok = vectorclock:update_clock(Partition, Dc, Ts),
             NewState1 = stale_utilities:remove_pending(NewState),
             riak_core_vnode_master:command(
               {Partition,node()}, calculate_stable_snapshot,
