@@ -38,7 +38,7 @@ set(Key, Value, Orddict) ->
 
 %%Add pending
 add_pending(Dc, CommitTime, PendingVer) ->
-    lager:info("Adding pending commit: committime ~w now ~w ~n", [CommitTime, clock_vnode:now_microsec(erlang:now())]),
+    lager:info("Adding pending commit: committime ~w now ~w ~n", [CommitTime, clocksi_vnode:now_microsec(erlang:now())]),
     case orddict:find(Dc, PendingVer) of
         {ok, Q} ->
             Q2 = queue:in(CommitTime, Q),
