@@ -150,7 +150,7 @@ check_and_update(SnapshotTime, Localclock, Transaction,
             {ok, NewState} = finish_update_dc(
                                Dc, DcQ, Ts, StateData),
             ok = vectorclock:update_clock(Partition, Dc, Ts),
-            NewState1 = stale_utilities:remove_pending(NewState),
+            NewState1 = stale_utilities:remove_pending(NewState, dc_utilities:get_my_dc_id()),
             riak_core_vnode_master:command(
               {Partition,node()}, calculate_stable_snapshot,
               vectorclock_vnode_master),

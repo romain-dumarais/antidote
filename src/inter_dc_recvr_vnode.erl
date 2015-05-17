@@ -29,7 +29,7 @@
 -export([start_vnode/1,
          %%API begin
          store_updates/1,
-         fetch_stale_statistics/0,
+         fetch_stale/0,
          %%API end
          init/1,
          terminate/2,
@@ -79,17 +79,18 @@ store_updates(Transactions) ->
                                    inter_dc_recvr_vnode_master),
     ok.
 
-fetch_stale_statistics() ->
+fetch_stale() ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
     AllPartitions = riak_core_ring:all_owners(Ring),
-    io:format("Get all partitions: ~w ~n", [AllPartitions]),
+    %io:format("Get all partitions: ~w ~n", [AllPartitions]),
     {TotalStale, TotalCnt} = lists:foldl(fun(Node, {Sum, Cnt}) -> 
                                         {ok, {Stale, Num}}= riak_core_vnode_master:sync_command(Node,
                                             {get_stale_statistics}, inter_dc_recvr_vnode_master),
-                                        io:format("Got statistics ~w ~w ~n", [Stale, Num]),
+                                        %io:format("Got statistics ~w ~w ~n", [Stale, Num]),
                                         {Sum + Stale, Cnt + Num}  end, 
                                     {0,0}, AllPartitions),
-    AvgStale = (TotalStale div TotalCnt) div 1000000,
+    TotalCnt1 = max(1, TotalCnt),
+    AvgStale = (TotalStale div TotalCnt1) div 1000000,
     io:format("Stale ~w, Cnt ~w , Avg stale ~w ~n", [TotalStale, TotalCnt, AvgStale]).
 
 store_update(Node, Transaction) ->

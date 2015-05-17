@@ -28,7 +28,7 @@
 
 
 -export([add_pending/3,
-         remove_pending/1
+         remove_pending/2
         ]).
 
 
@@ -38,7 +38,7 @@ set(Key, Value, Orddict) ->
 
 %%Add pending
 add_pending(Dc, CommitTime, PendingVer) ->
-    lager:info("Adding pending commit: committime ~w now ~w ~n", [CommitTime, clocksi_vnode:now_microsec(erlang:now())]),
+    %%lager:info("Adding pending commit: committime ~w now ~w ~n", [CommitTime, clocksi_vnode:now_microsec(erlang:now())]),
     case orddict:find(Dc, PendingVer) of
         {ok, Q} ->
             Q2 = queue:in(CommitTime, Q),
@@ -51,15 +51,20 @@ add_pending(Dc, CommitTime, PendingVer) ->
 
 
 %%Remove pending
-remove_pending(StateData)->
+remove_pending(StateData, MyDc)->
     Partition = StateData#recvr_state.partition,
     PendingVer = StateData#recvr_state.pending_ver,
     StaleSum = StateData#recvr_state.stale_sum,
     ProcessedNum = StateData#recvr_state.processed_num,
     CurrentTime = clocksi_vnode:now_microsec(erlang:now()),
-    {ok, StableSnapshot} = riak_core_vnode_master:sync_command(
-                            {Partition,node()}, get_stable_snapshot,
+    {ok, FakeSnapshot} = riak_core_vnode_master:sync_command(
+                            {Partition,node()}, get_clock,
                              vectorclock_vnode_master),
+    StableSnapshot = vectorclock:set_clock_of_dc(MyDc, clocksi_vnode:now_microsec(erlang:now()), FakeSnapshot),
+    %{ok, StableSnapshot} = riak_core_vnode_master:sync_command(
+    %                        {Partition,node()}, get_stable_snapshot,
+    %                         vectorclock_vnode_master),
+
     {NewPendingVer, NewStaleSum, NewProcessedNum} = remove_pending(PendingVer, StaleSum, ProcessedNum, 
                                                                     StableSnapshot, CurrentTime),
     StateData#recvr_state{pending_ver=NewPendingVer, stale_sum=NewStaleSum, processed_num=NewProcessedNum}.
@@ -86,7 +91,7 @@ remove_pending_until(Snapshot, CurrentTime, Q, StaleSum, Num) ->
             E = queue:head(Q),
             case E =< Snapshot of
                 true ->
-                    lager:info("Removing pending commit: committime ~w currenttime ~w ~n", [E, CurrentTime]),
+                    %%lager:info("Removing pending commit: committime ~w currenttime ~w ~n", [E, CurrentTime]),
                     remove_pending_until(Snapshot, CurrentTime, queue:drop(Q),
                         StaleSum+CurrentTime-E, Num+1);
                 false ->

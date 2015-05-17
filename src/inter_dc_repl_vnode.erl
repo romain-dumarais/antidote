@@ -24,6 +24,7 @@
 -module(inter_dc_repl_vnode).
 -behaviour(riak_core_vnode).
 -include("antidote.hrl").
+-include("inter_dc_repl.hrl").
 
 -export([start_vnode/1,
          init/1,
@@ -45,8 +46,6 @@
                 last_op=empty,
                 reader}).
 
-%% REPL_PERIOD: Frequency of checking new transactions and sending to other DC
--define(REPL_PERIOD, 5000).
 
 start_vnode(I) ->
     {ok, Pid} = riak_core_vnode_master:get_vnode_pid(I, ?MODULE),
