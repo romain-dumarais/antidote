@@ -345,6 +345,7 @@ spawn_read(LastNode, TxId, Return) ->
 
 %% @doc The following function tests the certification check algorithm,
 %%      when two concurrent txs modify a single object, one hast to abort.
+%% They will commit in this branch because no certification check
 clocksi_test_certification_check(Nodes) ->
     lager:info("clockSI_test_certification_check started"),
     FirstNode = hd(Nodes),
@@ -379,14 +380,17 @@ clocksi_test_certification_check(Nodes) ->
 
     %% commit the first tx.
     CommitTime=rpc:call(FirstNode, antidote, clocksi_iprepare, [TxId]),
-    ?assertMatch({aborted, TxId}, CommitTime),
+    ?assertMatch({ok, _}, CommitTime),
     lager:info("Tx1 sent prepare, got message: ~p", [CommitTime]),
-    lager:info("Tx1 aborted. Test passed!"),
+    End2=rpc:call(FirstNode, antidote, clocksi_icommit, [TxId]),
+    ?assertMatch({ok, _}, End2),
+    lager:info("Tx1 committed. Test passed!"),
     pass.
 
 %% @doc The following function tests the certification check algorithm.
 %%      when two concurrent txs modify a single object, one hast to abort.
 %%      Besides, it updates multiple partitions.
+%% No abort in this branch, causal consistency
 clocksi_multiple_test_certification_check(Nodes) ->
     lager:info("clockSI_test_certification_check started"),
     FirstNode = hd(Nodes),
@@ -429,9 +433,11 @@ clocksi_multiple_test_certification_check(Nodes) ->
 
     %% commit the first tx.
     CommitTime=rpc:call(FirstNode, antidote, clocksi_iprepare, [TxId]),
-    ?assertMatch({aborted, TxId}, CommitTime),
+    ?assertMatch({ok, _}, CommitTime),
     lager:info("Tx1 sent prepare, got message: ~p", [CommitTime]),
-    lager:info("Tx1 aborted. Test passed!"),
+    End2=rpc:call(FirstNode, antidote, clocksi_icommit, [TxId]),
+    ?assertMatch({ok, _}, End2),
+    lager:info("Tx1 committed. Test passed!"),
     pass.
 
 %% @doc Read an update a key multiple times.

@@ -164,7 +164,6 @@ is_op_in_snapshot(TxId, Op, {OpDc, OpCommitTime}, OperationSnapshotTime, Snapsho
 	    {false,true,PrevTime}
     end.
    
-
 %% @doc Apply updates in given order without any checks.
 %%    Careful: In contrast to materialize/6, it takes just operations, not clocksi_payloads!
 -spec materialize_eager(type(), snapshot(), [op()]) -> snapshot().
