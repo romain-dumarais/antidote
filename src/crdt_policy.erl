@@ -228,4 +228,16 @@ minimum_test() ->
     %% The minimum should be the intersection of the sets
     ?assertEqual([write], value(get_right, PolicyMult)).
 
+binary_test() ->
+    Policy1 = new(),
+    BinaryPolicy1 = to_binary(Policy1),
+    Policy2 = from_binary(BinaryPolicy1),
+    ?assert(equal(Policy1, Policy2)),
+
+    {ok, Op1} = generate_downstream({set_right, [read, write]}, 1, Policy1),
+    {ok, Policy3} = update(Op1, Policy1),
+    BinaryPolicy3 = to_binary(Policy3),
+    Policy4 = from_binary(BinaryPolicy3),
+    ?assert(equal(Policy3, Policy4)).
+
 -endif.
