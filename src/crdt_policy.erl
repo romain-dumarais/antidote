@@ -24,7 +24,15 @@
 %% firstly call `generate_downstream/3' to get the downstream version of the
 %% operation and then call `update/2'.
 %%
-%% It provides ??? operations: TODO
+%% It provides an operation set_right to update the right. Concurrent updates
+%% lead to multiple versions of the policy. When querying the policy for the
+%% current value with get_right, the minimum of the concurrently assigned rights
+%% is returned.
+%%
+%% In the current implementation, the rights are modeled as sets of arbitrary
+%% elements. In the most basic version, sets of atoms are used, where each atom
+%% represents an operation which may be performed. The minimum is computed as
+%% the intersection of these sets.
 %%
 %% @end
 -module(crdt_policy).
