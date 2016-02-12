@@ -44,10 +44,10 @@
 
 -type policy_op() :: {set_right, right()}.
 
--opaque policy_downstream_op() :: {set_right, right(), token(), orddict:orddict()}.
+%% cannot be opaque because dialyzer does not like this for the generate_downstream spec
+-type policy_downstream_op() :: {set_right, right(), binary(), policy()}.
 
 -type right() :: ordsets:ordset(term()).
--type token() :: term().
 
 -type actor() :: riak_dt:actor().
 
@@ -73,7 +73,8 @@ value(get_right, Policy) ->
 
 -spec generate_downstream(policy_op(), actor(), policy()) -> {ok, policy_downstream_op()}.
 generate_downstream({set_right, Right}, Actor, CurrentPolicy) ->
-    {ok, {set_right, Right, unique(Actor), CurrentPolicy}}.
+    Token = unique(Actor),
+    {ok, {set_right, Right, Token, CurrentPolicy}}.
 
 -spec update(policy_downstream_op(), policy()) -> {ok, policy()}.
 update({set_right, Right, Token, Dependencies}, Policy) ->
@@ -109,6 +110,7 @@ is_operation(Operation) ->
 
 
 % Private
+%-spec add_right(right(), binary(), policy()) -> {ok, policy()}.
 add_right(Right, Token, Policy) ->
     case orddict:find(Right, Policy) of
         {ok, Tokens} ->
@@ -122,6 +124,7 @@ add_right(Right, Token, Policy) ->
             {ok, orddict:store(Right, [Token], Policy)}
     end.
 
+%-spec remove_right(right(), [binary()], policy()) -> policy().
 remove_right(Right, RemoveTokens, Policy) ->
     case orddict:find(Right, Policy) of
         {ok, Tokens} ->
@@ -136,11 +139,13 @@ remove_right(Right, RemoveTokens, Policy) ->
             Policy % if the right is not in the policy anymore, it was already removed by a different policy change
     end.
 
+%-spec remove_rights(orddict:orddict(), policy()) -> policy().
 remove_rights(Orddict, Policy) ->
     orddict:fold(fun(Right, Tokens, Res) ->
                    remove_right(Right, Tokens, Res)
                  end, Policy, Orddict).
 
+%-spec unique(actor()) -> binary().
 unique(_Actor) ->
     crypto:strong_rand_bytes(20).
 
