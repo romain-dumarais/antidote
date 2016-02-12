@@ -12,7 +12,7 @@
 -define(COMM_TIMEOUT, infinity).
 -define(NUM_W, 2).
 -define(NUM_R, 2).
--define(CRDTS, [crdt_bcounter, crdt_orset, crdt_pncounter, crdt_rga]).
+-define(CRDTS, [crdt_bcounter, crdt_orset, crdt_pncounter, crdt_rga, crdt_policy]).
 %% Allow read concurrency on shared ets tables
 %% These are the tables that store materialized objects
 %% and information about live transactions, so the assumption
@@ -88,7 +88,7 @@
 
 -define(CLOCKSI_TIMEOUT, 1000).
 
--record(tx_id, {snapshot_time :: snapshot_time(), 
+-record(tx_id, {snapshot_time :: snapshot_time(),
                 server_pid :: pid()}).
 -record(clocksi_payload, {key :: key(),
                           type :: type(),
