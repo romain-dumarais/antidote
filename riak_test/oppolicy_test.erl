@@ -61,7 +61,7 @@ empty_policy_test(Cluster1, _Cluster2) ->
     ?assertMatch({ok, _}, Result3),
     Result4=rpc:call(FirstNode, antidote, read,
                     [Key, Type]),
-    ?assertMatch({ok, [[read]]}, Result4).
+    ?assertMatch({ok, [read]}, Result4).
 
 concurrent_set_retain_test(Cluster1, Cluster2) ->
     FirstNode = hd(Cluster1),
@@ -80,13 +80,13 @@ concurrent_set_retain_test(Cluster1, Cluster2) ->
                       [Key, Type, {{set_right, [read]}, actor1}]),
     ?assertMatch({ok, _}, Result0),
     {ok, {_, _, CommitTime0}} = Result0,
-    ?assertMatch({ok, [[read]]}, rpc:call(FirstNode, antidote, read,
+    ?assertMatch({ok, [read]}, rpc:call(FirstNode, antidote, read,
                                             [Key, Type])),
     Result1=rpc:call(SecondNode, antidote, append,
                       [Key, Type, {{set_right, [read, write]}, actor2}]),
     ?assertMatch({ok, _}, Result1),
     {ok, {_, _, CommitTime1}} = Result1,
-    ?assertMatch({ok, [[read, write]]}, rpc:call(SecondNode, antidote, read,
+    ?assertMatch({ok, [read, write]}, rpc:call(SecondNode, antidote, read,
                                                   [Key, Type])),
 
     % heal the cluster again and converge
@@ -98,8 +98,7 @@ concurrent_set_retain_test(Cluster1, Cluster2) ->
                       [CombinedTime, Key, Type]),
     ?assertMatch({ok, _}, Result2),
     {ok, {_, [Value], _}} = Result2,
-    ?assert(lists:member([read], Value)),
-    ?assert(lists:member([read, write], Value)).
+    ?assertMatch([read], Value).
 
 
 % add_test(Nodes) ->

@@ -64,14 +64,14 @@ new() ->
     orddict:new().
 
 
--spec value(policy()) -> [right()].
-value(Policy) ->
+-spec value(all_versions, policy()) -> [right()].
+value(all_versions, Policy) ->
     orddict:fold(fun(Right, Tokens, Res)->
                   lists:duplicate(length(Tokens), Right) ++ Res end,
                  [], Policy).
 
--spec value(get_right, policy()) -> right().
-value(get_right, Policy) ->
+-spec value(policy()) -> right().
+value(Policy) ->
     case orddict:fetch_keys(Policy) of
         [] ->
             ordsets:new();
@@ -180,34 +180,34 @@ set_test() ->
 
 value_test() ->
     Policy1 = new(),
-    ?assertEqual([], value(Policy1)),
+    ?assertEqual([], value(all_versions, Policy1)),
 
     {ok, DownstreamOp1} = generate_downstream({set_right, ordsets:from_list([read])}, 1, Policy1),
     {ok, Policy2} = update(DownstreamOp1, Policy1),
-    ?assertEqual([[read]], value(Policy2)),
-    ?assertEqual([read], value(get_right, Policy2)),
+    ?assertEqual([[read]], value(all_versions, Policy2)),
+    ?assertEqual([read], value(Policy2)),
 
     {ok, DownstreamOp2} = generate_downstream({set_right, ordsets:from_list([read, write])}, 1, Policy2),
     {ok, Policy3} = update(DownstreamOp2, Policy2),
-    ?assertEqual([[read, write]], value(Policy3)),
-    ?assertEqual([read, write], value(get_right, Policy3)).
+    ?assertEqual([[read, write]], value(all_versions, Policy3)),
+    ?assertEqual([read, write], value(Policy3)).
 
 concurrent_set_retain_test() ->
     Policy1 = new(),
     %% Set one version of the policy
     {ok, Op1} = generate_downstream({set_right, ordsets:from_list([read])}, 1, Policy1),
     {ok, Policy2} = update(Op1, Policy1),
-    ?assertEqual([[read]], value(Policy2)),
+    ?assertEqual([[read]], value(all_versions, Policy2)),
 
     %% If a second set if concurrent to the first one, retain both policies
     {ok, Op2} = generate_downstream({set_right, ordsets:from_list([read, write])}, 1, Policy1),
     {ok, Policy3} = update(Op2, Policy2),
-    Values3 = value(Policy3),
+    Values3 = value(all_versions, Policy3),
     ?assert(lists:member([read, write], Values3)),
     ?assert(lists:member([read], Values3)),
 
     %% Return the minimum as the current right
-    ?assertEqual([read], value(get_right, Policy3)).
+    ?assertEqual([read], value(Policy3)).
 
 concurrent_update_test() ->
     Policy1 = new(),
@@ -216,19 +216,19 @@ concurrent_update_test() ->
     {ok, Policy2} = update(Op1, Policy1),
     {ok, Op2} = generate_downstream({set_right, ordsets:from_list([read, write])}, 1, Policy1),
     {ok, PolicyMult} = update(Op2, Policy2),
-    ?assertEqual(2, length(value(PolicyMult))),
+    ?assertEqual(2, length(value(all_versions, PolicyMult))),
 
     %% Update the policy on the replica only seeing the [read] right (Policy2)
     {ok, Op3} = generate_downstream({set_right, ordsets:from_list([read, write, own])}, 1, Policy2),
     %% Apply the operation to the multi-version state
     {ok, PolicyUpdated} = update(Op3, PolicyMult),
-    ValuesUpdated = value(PolicyUpdated),
+    ValuesUpdated = value(all_versions, PolicyUpdated),
     ?assertEqual(2, length(ValuesUpdated)),
     ?assert(lists:member(ordsets:from_list([read, write]), ValuesUpdated)),
     ?assert(lists:member(ordsets:from_list([read, write, own]), ValuesUpdated)),
 
     %% Return the minimum as the current right
-    ?assertEqual([read, write], value(get_right, PolicyUpdated)).
+    ?assertEqual([read, write], value(PolicyUpdated)).
 
 minimum_test() ->
     Policy1 = new(),
@@ -239,7 +239,7 @@ minimum_test() ->
     {ok, PolicyMult} = update(Op2, Policy2),
 
     %% The minimum should be the intersection of the sets
-    ?assertEqual([write], value(get_right, PolicyMult)).
+    ?assertEqual([write], value(PolicyMult)).
 
 binary_test() ->
     Policy1 = new(),
