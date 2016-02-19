@@ -110,7 +110,7 @@ from_binary(<<?TAG:8/integer, ?V1_VERS:8/integer, Bin/binary>>) ->
 -spec is_operation(term()) -> boolean().
 is_operation(Operation) ->
     case Operation of
-        {set_right, _Right, _Token, _Dependencies} ->
+        {set_right, _Right} ->
             true;
         _ ->
             false
