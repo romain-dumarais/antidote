@@ -29,26 +29,27 @@ confirm() ->
     rt:update_app_config(all,[
         {riak_core, [{ring_creation_size, NumVNodes}]}
     ]),
-    [Nodes] = rt:build_clusters([3]),
-    rt:wait_until_ring_converged(Nodes),
 
-    lager:info("Waiting until vnodes are started up"),
-    rt:wait_until(hd(Nodes),fun wait_init:check_ready/1),
-    lager:info("Vnodes are started up"),
+    Clean = rt_config:get(clean_cluster, true),
+    [Cluster1, Cluster2] = rt:build_clusters([1,1]),
+    rt:wait_until_ring_converged(Cluster1),
+    rt:wait_until_ring_converged(Cluster2),
 
-    lager:info("Nodes: ~p", [Nodes]),
-    empty_policy_test(Nodes),
+    ok = common:setup_dc_manager([Cluster1, Cluster2], first_run),
 
-    % [Nodes1] = common:clean_clusters([Nodes]),
-    % add_test(Nodes1),
-    %
+    empty_policy_test(Cluster1, Cluster2),
+
+    [Cluster3, Cluster4] = common:clean_clusters([Cluster1, Cluster2]),
+    ok = common:setup_dc_manager([Cluster3, Cluster4], Clean),
+    concurrent_set_retain_test(Cluster3, Cluster4),
+
     % [Nodes2] = common:clean_clusters([Nodes1]),
     % remove_test(Nodes2),
     pass.
 
 
-empty_policy_test(Nodes) ->
-    FirstNode = hd(Nodes),
+empty_policy_test(Cluster1, _Cluster2) ->
+    FirstNode = hd(Cluster1),
     lager:info("Empty policy test started"),
     Type = crdt_policy,
     Key = key_empty,
@@ -61,6 +62,44 @@ empty_policy_test(Nodes) ->
     Result4=rpc:call(FirstNode, antidote, read,
                     [Key, Type]),
     ?assertMatch({ok, [[read]]}, Result4).
+
+concurrent_set_retain_test(Cluster1, Cluster2) ->
+    FirstNode = hd(Cluster1),
+    SecondNode = hd(Cluster2),
+    lager:info("Check if concurrent set operations are retained"),
+    Type = crdt_policy,
+    Key = key_set_retain,
+
+    % partition FirstNode from SecondNode
+    {ok, D1} = rpc:call(FirstNode, inter_dc_manager, get_descriptor, []),
+
+    ok = rpc:call(SecondNode, inter_dc_manager, forget_dcs, [[D1]]),
+
+    % write different policies on the two nodes
+    Result0=rpc:call(FirstNode, antidote, append,
+                      [Key, Type, {{set_right, [read]}, actor1}]),
+    ?assertMatch({ok, _}, Result0),
+    {ok, {_, _, CommitTime0}} = Result0,
+    ?assertMatch({ok, [[read]]}, rpc:call(FirstNode, antidote, read,
+                                            [Key, Type])),
+    Result1=rpc:call(SecondNode, antidote, append,
+                      [Key, Type, {{set_right, [read, write]}, actor2}]),
+    ?assertMatch({ok, _}, Result1),
+    {ok, {_, _, CommitTime1}} = Result1,
+    ?assertMatch({ok, [[read, write]]}, rpc:call(SecondNode, antidote, read,
+                                                  [Key, Type])),
+
+    % heal the cluster again and converge
+    [ok] = rpc:call(SecondNode, inter_dc_manager, observe_dcs, [[D1]]),
+
+    % check the convergence of the policy values (retaining both)
+    CombinedTime = vectorclock:max([CommitTime0, CommitTime1]),
+    Result2=rpc:call(FirstNode, antidote, clocksi_read,
+                      [CombinedTime, Key, Type]),
+    ?assertMatch({ok, _}, Result2),
+    {ok, {_, [Value], _}} = Result2,
+    ?assert(lists:member([read], Value)),
+    ?assert(lists:member([read, write], Value)).
 
 
 % add_test(Nodes) ->
