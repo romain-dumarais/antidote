@@ -57,22 +57,30 @@ value(Map) ->
     end, Map).
 
 % -spec generate_downstream(policy_op(), actor(), policy()) -> {ok, policy_downstream_op()}.
-generate_downstream({update, {Key, Type}, Op}, Actor, CurrentMap) ->
+generate_downstream({update, {{Key, Type}, Op}}, Actor, CurrentMap) ->
     % TODO could be optimized for some types
     CurrentValue = case dict:is_key({Key, Type}, CurrentMap) of
       true -> dict:fetch({Key, Type}, CurrentMap);
       false -> Type:new()
     end,
     {ok, DownstreamOp} = Type:generate_downstream(Op, Actor, CurrentValue),
-    {ok, {update, {Key, Type}, DownstreamOp}}.
+    {ok, {update, {{Key, Type}, DownstreamOp}}}.
 
-update({update, {Key, Type}, Op}, Map) ->
+update({update, {{Key, Type}, Op}}, Map) ->
     case dict:is_key({Key, Type}, Map) of
       true -> {ok, dict:update({Key, Type}, fun(V) -> {ok, Value} = Type:update(Op, V), Value end, Map)};
       false -> NewValue = Type:new(),
                {ok, NewValueUpdated} = Type:update(Op, NewValue),
                {ok, dict:store({Key, Type}, NewValueUpdated, Map)}
     end.
+
+% apply_ops([], Map) ->
+%     {ok, Map};
+% apply_ops([Op | Rest], Map) ->
+%     case update(Op, Map) of
+%         {ok, ORDict1} -> apply_ops(Rest, ORDict1);
+%         Error -> Error
+%     end.
 
 equal(Map1, Map2) ->
     Map1 == Map2. % TODO better implementation
@@ -92,7 +100,7 @@ from_binary(<<?TAG:8/integer, ?V1_VERS:8/integer, Bin/binary>>) ->
 
 is_operation(Operation) ->
     case Operation of
-        {update, {_Key, _Type}, _Op} ->
+        {update, {{_Key, _Type}, _Op}} ->
             true;
         _ ->
             false
@@ -105,13 +113,13 @@ is_operation(Operation) ->
 % TODO
 -ifdef(TEST).
 new_test() ->
-  ?assertEqual(dict:new(), new()).
+    ?assertEqual(dict:new(), new()).
 
 update_test() ->
-  Map1 = new(),
-  {ok, DownstreamOp} = generate_downstream({update, {key1, crdt_lwwreg}, {assign, <<"test">>}}, actor, Map1),
-  ?assertMatch({update, {key1, crdt_lwwreg}, {assign, <<"test">>, _TS}}, DownstreamOp),
-  {ok, Map2} = update(DownstreamOp, Map1),
-  Key1Value = dict:fetch({key1, crdt_lwwreg}, value(Map2)),
-  ?assertEqual(<<"test">>, Key1Value).
+    Map1 = new(),
+    {ok, DownstreamOp} = generate_downstream({update, {{key1, crdt_lwwreg}, {assign, <<"test">>}}}, actor, Map1),
+    ?assertMatch({update, {{key1, crdt_lwwreg}, {assign, <<"test">>, _TS}}}, DownstreamOp),
+    {ok, Map2} = update(DownstreamOp, Map1),
+    Key1Value = dict:fetch({key1, crdt_lwwreg}, value(Map2)),
+    ?assertEqual(<<"test">>, Key1Value).
 -endif.
