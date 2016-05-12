@@ -64,7 +64,9 @@ generate_downstream({update, {{Key, Type}, Op}}, Actor, CurrentMap) ->
       false -> Type:new()
     end,
     {ok, DownstreamOp} = Type:generate_downstream(Op, Actor, CurrentValue),
-    {ok, {update, {{Key, Type}, DownstreamOp}}}.
+    {ok, {update, {{Key, Type}, DownstreamOp}}};
+generate_downstream({update, Ops}, Actor, CurrentMap) when is_list(Ops) ->
+    lists:map(fun(Op) -> {ok, DSOp} = generate_downstream(Op, Actor, CurrentMap), DSOp end, Ops).
 
 update({update, {{Key, Type}, Op}}, Map) ->
     case dict:is_key({Key, Type}, Map) of
@@ -72,15 +74,17 @@ update({update, {{Key, Type}, Op}}, Map) ->
       false -> NewValue = Type:new(),
                {ok, NewValueUpdated} = Type:update(Op, NewValue),
                {ok, dict:store({Key, Type}, NewValueUpdated, Map)}
-    end.
+    end;
+update({update, Ops}, Map) ->
+    apply_ops(Ops, Map).
 
-% apply_ops([], Map) ->
-%     {ok, Map};
-% apply_ops([Op | Rest], Map) ->
-%     case update(Op, Map) of
-%         {ok, ORDict1} -> apply_ops(Rest, ORDict1);
-%         Error -> Error
-%     end.
+apply_ops([], Map) ->
+    {ok, Map};
+apply_ops([Op | Rest], Map) ->
+    case update(Op, Map) of
+        {ok, ORDict1} -> apply_ops(Rest, ORDict1);
+        Error -> Error
+    end.
 
 equal(Map1, Map2) ->
     Map1 == Map2. % TODO better implementation
@@ -102,6 +106,8 @@ is_operation(Operation) ->
     case Operation of
         {update, {{_Key, _Type}, _Op}} ->
             true;
+        {update, Ops} when is_list(Ops) ->
+            lists:all(fun is_operation/1, Ops);
         _ ->
             false
     end.
