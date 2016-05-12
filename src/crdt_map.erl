@@ -26,7 +26,7 @@
 
 %% API
 -export([new/0, value/1, generate_downstream/3, update/2, equal/2,
-    to_binary/1, from_binary/1, value/2, is_operation/1]).
+    to_binary/1, from_binary/1, is_operation/1]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -52,29 +52,28 @@ new() ->
 
 % -spec value(policy()) -> right().
 value(Map) ->
-    dict:map(fun({Key, Type}, Value) ->
+    dict:map(fun({_Key, Type}, Value) ->
       Type:value(Value)
     end, Map).
 
 % -spec generate_downstream(policy_op(), actor(), policy()) -> {ok, policy_downstream_op()}.
 generate_downstream({update, {Key, Type}, Op}, Actor, CurrentMap) ->
     % TODO could be optimized for some types
-    CurrentValue = case is_key({Key, Type}, CurrentMap) of
+    CurrentValue = case dict:is_key({Key, Type}, CurrentMap) of
       true -> dict:fetch({Key, Type}, CurrentMap);
       false -> Type:new()
     end,
-    {ok, {update, {Key, Type}, Type:generate_downstream(Op, Actor, CurrentValue)}};
+    {ok, DownstreamOp} = Type:generate_downstream(Op, Actor, CurrentValue),
+    {ok, {update, {Key, Type}, DownstreamOp}}.
 
--spec update(policy_downstream_op(), policy()) -> {ok, policy()}.
 update({update, {Key, Type}, Op}, Map) ->
-    case is_key({Key, Type}, Map) of
-      true -> dict:update({Key, Type}, fun(V) -> Type:update(Op, V) end, Map);
+    case dict:is_key({Key, Type}, Map) of
+      true -> {ok, dict:update({Key, Type}, fun(V) -> {ok, Value} = Type:update(Op, V), Value end, Map)};
       false -> NewValue = Type:new(),
-               Type:update(Op, NewValue),
-               dict:append({Key, Type}, NewValue, Map)
+               {ok, NewValueUpdated} = Type:update(Op, NewValue),
+               {ok, dict:store({Key, Type}, NewValueUpdated, Map)}
     end.
 
--spec equal(policy(), policy()) -> boolean().
 equal(Map1, Map2) ->
     Map1 == Map2. % TODO better implementation
 
@@ -83,17 +82,14 @@ equal(Map1, Map2) ->
 -define(TAG, 101). % this should be part of riak_dt
 -define(V1_VERS, 1).
 
--spec to_binary(policy()) -> binary_policy().
 to_binary(Policy) ->
     %% @TODO something smarter
     <<?TAG:8/integer, ?V1_VERS:8/integer, (term_to_binary(Policy))/binary>>.
 
--spec from_binary(binary_policy()) -> {ok, policy()}.
 from_binary(<<?TAG:8/integer, ?V1_VERS:8/integer, Bin/binary>>) ->
     %% @TODO something smarter
     binary_to_term(Bin).
 
--spec is_operation(term()) -> boolean().
 is_operation(Operation) ->
     case Operation of
         {update, {_Key, _Type}, _Op} ->
@@ -107,3 +103,15 @@ is_operation(Operation) ->
 %% EUnit tests
 %% ===================================================================
 % TODO
+-ifdef(TEST).
+new_test() ->
+  ?assertEqual(dict:new(), new()).
+
+update_test() ->
+  Map1 = new(),
+  {ok, DownstreamOp} = generate_downstream({update, {key1, crdt_lwwreg}, {assign, <<"test">>}}, actor, Map1),
+  ?assertMatch({update, {key1, crdt_lwwreg}, {assign, <<"test">>, _TS}}, DownstreamOp),
+  {ok, Map2} = update(DownstreamOp, Map1),
+  Key1Value = dict:fetch({key1, crdt_lwwreg}, value(Map2)),
+  ?assertEqual(<<"test">>, Key1Value).
+-endif.
