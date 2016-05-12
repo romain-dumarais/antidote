@@ -66,7 +66,7 @@ generate_downstream({update, {{Key, Type}, Op}}, Actor, CurrentMap) ->
     {ok, DownstreamOp} = Type:generate_downstream(Op, Actor, CurrentValue),
     {ok, {update, {{Key, Type}, DownstreamOp}}};
 generate_downstream({update, Ops}, Actor, CurrentMap) when is_list(Ops) ->
-    lists:map(fun(Op) -> {ok, DSOp} = generate_downstream(Op, Actor, CurrentMap), DSOp end, Ops).
+    {ok, {update, lists:map(fun(Op) -> {ok, DSOp} = generate_downstream(Op, Actor, CurrentMap), DSOp end, Ops)}}.
 
 update({update, {{Key, Type}, Op}}, Map) ->
     case dict:is_key({Key, Type}, Map) of
