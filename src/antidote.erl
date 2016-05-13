@@ -109,9 +109,17 @@ read_objects(Objects, TxId) ->
                                         error
                                 end
                         end, Objects),
-    case lists:member(error, Results) of
-        true -> {error, read_failed}; %% TODO: Capture the reason for error
-        false -> {ok, Results}
+    Errors = lists:foldl(fun(Item, L) ->
+            case Item of
+                ok -> L;
+                {error, Reason} -> [Reason|L]
+            end
+        end,
+        [],
+        Results),
+    case Errors of
+        [] -> ok;
+        _ -> {error, Errors}
     end.
 
 -spec update_objects([{bound_object(), op(), op_param()}], txid())
@@ -126,13 +134,21 @@ update_objects(Updates, TxId) ->
                         case clocksi_iupdate(TxId, Key, Type,
                                              {{Op, OpParam}, Actor}) of
                             ok -> ok;
-                            {error, _Reason} ->
-                                error
+                            {error, Reason} ->
+                                {error, Reason}
                         end
                 end, Updates),
-    case lists:member(error, Results) of
-        true -> {error, read_failed}; %% TODO: Capture the reason for error
-        false -> ok
+    Errors = lists:foldl(fun(Item, L) ->
+            case Item of
+                ok -> L;
+                {error, Reason} -> [Reason|L]
+            end
+        end,
+        [],
+        Results),
+    case Errors of
+        [] -> ok;
+        _ -> {error, Errors}
     end.
 
 %% For static transactions: bulk updates and bulk reads
@@ -150,13 +166,13 @@ update_objects(Clock, _Properties, Updates, StayAlive) ->
                    Updates),
     SingleKey = case Operations of
                     [_O] -> %% Single key update
-                        case Clock of 
+                        case Clock of
                             ignore -> true;
                             _ -> false
                         end;
                     [_H|_T] -> false
                 end,
-    case SingleKey of 
+    case SingleKey of
         true ->  %% if single key, execute the fast path
             [{update, {K, T, Op}}] = Operations,
             case append(K, T, Op) of
@@ -184,7 +200,7 @@ read_objects(Clock, _Properties, Objects, StayAlive) ->
              Objects),
     SingleKey = case Args of
                     [_O] -> %% Single key update
-                        case Clock of 
+                        case Clock of
                             ignore -> true;
                             _ -> false
                         end;
@@ -437,7 +453,7 @@ gr_snapshot_read(ClientClock, Args) ->
         true ->
             %% Set all entries in snapshot as GST
             ST = dict:map(fun(_,_) -> GST end, VST),
-            %% ST doesnot contain entry for local dc, hence explicitly 
+            %% ST doesnot contain entry for local dc, hence explicitly
             %% add it in snapshot time
             SnapshotTime = vectorclock:set_clock_of_dc(DcId, GST, ST),
             clocksi_execute_tx(SnapshotTime, Args, no_update_clock);
