@@ -109,9 +109,17 @@ read_objects(Objects, TxId) ->
                                         error
                                 end
                         end, Objects),
-    case lists:member(error, Results) of
-        true -> {error, read_failed}; %% TODO: Capture the reason for error
-        false -> {ok, Results}
+    Errors = lists:foldl(fun(Item, L) ->
+            case Item of
+                ok -> L;
+                {error, Reason} -> [Reason|L]
+            end
+        end,
+        [],
+        Results),
+    case Errors of
+        [] -> ok;
+        _ -> {error, Errors}
     end.
 
 -spec update_objects([{bound_object(), op(), op_param()}], txid())
