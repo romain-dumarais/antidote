@@ -108,7 +108,7 @@
 -type op()  :: {term(), term()}.
 -type crdt() :: term().
 -type val() :: term().
--type reason() :: atom().
+-type reason() :: atom() | [term()].
 %%chash:index_as_int() is the same as riak_core_apl:index().
 %%If it is changed in the future this should be fixed also.
 -type index_node() :: {chash:index_as_int(), node()}.
