@@ -105,21 +105,20 @@ read_objects(Objects, TxId) ->
                                 case clocksi_iread(TxId, Key, Type) of
                                     {ok, Res} ->
                                         Res;
-                                    {error, _Reason} ->
-                                        error
+                                    {error, Reason} ->
+                                        {error, Reason}
                                 end
                         end, Objects),
-    Errors = lists:foldl(fun(Item, L) ->
+    Errors = lists:filter(fun(Item) ->
             case Item of
-                ok -> L;
-                {error, Reason} -> [Reason|L]
+              {error, _Reason} -> true;
+              _ -> false
             end
         end,
-        [],
         Results),
     case Errors of
-        [] -> ok;
-        _ -> {error, Errors}
+        [] -> {ok, Results};
+        _ -> {error, lists:map(fun({error, Error}) -> Error end, Errors)}
     end.
 
 -spec update_objects([{bound_object(), op(), op_param()}], txid())
