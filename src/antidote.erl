@@ -112,7 +112,8 @@ read_objects(Objects, TxId) ->
     Errors = lists:foldl(fun(Item, L) ->
             case Item of
                 ok -> L;
-                {error, Reason} -> [Reason|L]
+                {error, Reason} -> [Reason|L];
+                Something -> io:format("Something else, but not an error: ~w~n", [Something]), L
             end
         end,
         [],
