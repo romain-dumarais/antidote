@@ -111,7 +111,7 @@ read_objects(Objects, TxId) ->
                         end, Objects),
     Errors = lists:filter(fun(Item) ->
             case Item of
-              {error, Reason} -> true;
+              {error, _Reason} -> true;
               _ -> false
             end
         end,
