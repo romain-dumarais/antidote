@@ -25,8 +25,9 @@
 
 -export([start_vnode/1,
     read_data_item/5,
+    async_read_data_item/4,
     get_cache_name/2,
-    get_min_prepared/1,
+    send_min_prepared/1,
     get_active_txns_key/3,
     get_active_txns/2,
     prepare/2,
@@ -35,6 +36,7 @@
     single_commit_sync/2,
     abort/2,
     now_microsec/1,
+    reverse_and_filter_updates_per_key/2,
     init/1,
     terminate/2,
     handle_command/3,
@@ -93,6 +95,9 @@ read_data_item(Node, TxId, Key, Type, Updates) ->
             {error, Reason}
     end.
 
+async_read_data_item(Node, TxId, Key, Type) ->
+    clocksi_readitem_fsm:async_read_data_item(Node, Key, Type, TxId, {fsm, self()}). 
+
 %% @doc Return active transactions in prepare state with their preparetime for a given key
 %% should be run from same physical node
 get_active_txns_key(Key, Partition, TableName) ->
@@ -145,11 +150,8 @@ get_active_txns_internal(TableName) ->
                 end,
     {ok, ActiveTxs}.
 
-get_min_prepared(Partition) ->
-    riak_core_vnode_master:sync_command({Partition, node()},
-					get_min_prepared,
-					clocksi_vnode_master,
-					infinity).
+send_min_prepared(Partition) ->
+    dc_utilities:call_local_vnode(Partition, clocksi_vnode_master, {send_min_prepared}).
 
 %% @doc Sends a prepare request to a Node involved in a tx identified by TxId
 prepare(ListofNodes, TxId) ->
@@ -205,6 +207,9 @@ get_cache_name(Partition, Base) ->
 init([Partition]) ->
     PreparedTx = open_table(Partition),
     CommittedTx = ets:new(committed_tx, [set]),
+    loop_until_started(Partition, ?READ_CONCURRENCY),
+    Node = node(),
+    true = clocksi_readitem_fsm:check_partition_ready(Node, Partition, ?READ_CONCURRENCY),
     {ok, #state{partition = Partition,
         prepared_tx = PreparedTx,
         committed_tx = CommittedTx,
@@ -225,10 +230,16 @@ check_tables_ready() ->
 check_table_ready([]) ->
     true;
 check_table_ready([{Partition, Node} | Rest]) ->
-    Result = riak_core_vnode_master:sync_command({Partition, Node},
-        {check_tables_ready},
-        ?CLOCKSI_MASTER,
-        infinity),
+    Result =
+	try
+	    riak_core_vnode_master:sync_command({Partition, Node},
+						{check_tables_ready},
+						?CLOCKSI_MASTER,
+						infinity)
+	catch
+	    _:_Reason ->
+		false
+	end,
     case Result of
         true ->
             check_table_ready(Rest);
@@ -273,9 +284,11 @@ handle_command({check_tables_ready}, _Sender, SD0 = #state{partition = Partition
              end,
     {reply, Result, SD0};
 
-handle_command(get_min_prepared, _Sender,
-	       State = #state{prepared_dict = PreparedDict}) ->
-    {reply, get_min_prep(PreparedDict), State};
+handle_command({send_min_prepared}, _Sender,
+	       State = #state{partition = Partition, prepared_dict = PreparedDict}) ->
+    {ok, Time} = get_min_prep(PreparedDict),
+    dc_utilities:call_local_vnode(Partition, logging_vnode_master, {send_min_prepared, Time}),
+    {noreply, State};
 
 handle_command({check_servers_ready}, _Sender, SD0 = #state{partition = Partition, read_servers = Serv}) ->
     loop_until_started(Partition, Serv),
@@ -289,6 +302,7 @@ handle_command({prepare, Transaction, WriteSet}, _Sender,
         prepared_tx = PreparedTx,
 	prepared_dict = PreparedDict
     }) ->
+    %lager:info("Trying to prepare ~w,WS ~w", [Transaction, WriteSet]),
     PrepareTime = now_microsec(dc_utilities:now()),
     {Result, NewPrepare, NewPreparedDict} = prepare(Transaction, WriteSet, CommittedTx, PreparedTx, PrepareTime, PreparedDict),
     case Result of
@@ -567,7 +581,7 @@ now_microsec({MegaSecs, Secs, MicroSecs}) ->
 certification_check(TxId, Updates, CommittedTx, PreparedTx) ->
     case application:get_env(antidote, txn_cert) of
         {ok, true} -> 
-        io:format("AAAAH"),
+        %io:format("AAAAH"),
         certification_with_check(TxId, Updates, CommittedTx, PreparedTx);
         _  -> true
     end.
