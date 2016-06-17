@@ -90,8 +90,8 @@ equal(Map1, Map2) ->
     Map1 == Map2. % TODO better implementation
 
 
-%-include_lib("riak_dt/include/riak_dt_tags.hrl").
--define(TAG, 101). % this should be part of riak_dt
+-include_lib("riak_dt/include/riak_dt_tags.hrl").
+-define(TAG, ?DT_MAP_TAG).
 -define(V1_VERS, 1).
 
 to_binary(Policy) ->
