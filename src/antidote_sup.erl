@@ -21,8 +21,12 @@
 
 -behaviour(supervisor).
 
+-include("antidote.hrl").
+
 %% API
--export([start_link/0]).
+-export([start_link/0,
+         start_metrics_collection/0
+        ]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -37,7 +41,16 @@
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-    
+
+%% Stats collector is not started with the supervisor. It has to be explicitly started
+start_metrics_collection() ->
+     StatsCollector = {
+                        antidote_stats_collector,
+                        {antidote_stats_collector, start_link, []},
+                        permanent, 5000, worker, [antidote_stats_collector]
+                      },
+    supervisor:start_child(?MODULE, StatsCollector).
+
 %% ===================================================================
 %% Supervisor callbacks
 %% ===================================================================
@@ -59,27 +72,31 @@ init(_Args) ->
                             {clocksi_interactive_tx_coord_sup, start_link, []},
                             permanent, 5000, supervisor,
                             [clockSI_interactive_tx_coord_sup]},
-    
+
     ClockSIReadSup = {clocksi_readitem_sup,
     		      {clocksi_readitem_sup, start_link, []},
     		      permanent, 5000, supervisor,
     		      [clocksi_readitem_sup]},
-    
+
     MaterializerMaster = {materializer_vnode_master,
                           {riak_core_vnode_master,  start_link,
                            [materializer_vnode]},
                           permanent, 5000, worker, [riak_core_vnode_master]},
 
+
+    BCounterManager = ?CHILD(bcounter_mgr, worker, []),
+
     ZMQContextManager = ?CHILD(zmq_context, worker, []),
     InterDcPub = ?CHILD(inter_dc_pub, worker, []),
     InterDcSub = ?CHILD(inter_dc_sub, worker, []),
+    StableMetaData = ?CHILD(stable_meta_data_server, worker, []),
     InterDcSubVnode = ?VNODE(inter_dc_sub_vnode_master, inter_dc_sub_vnode),
     InterDcDepVnode = ?VNODE(inter_dc_dep_vnode_master, inter_dc_dep_vnode),
-    InterDcLogReaderQMaster = ?CHILD(inter_dc_log_reader_query, worker, []),
-    InterDcLogReaderRMaster = ?CHILD(inter_dc_log_reader_response, worker, []),
+    InterDcLogReaderQMaster = ?CHILD(inter_dc_query, worker, []),
+    InterDcLogReaderRMaster = ?CHILD(inter_dc_query_receive_socket, worker, []),
     InterDcLogSenderMaster = ?VNODE(inter_dc_log_sender_vnode_master, inter_dc_log_sender_vnode),
 
-    
+
     MetaDataManagerSup = {meta_data_manager_sup,
 			  {meta_data_manager_sup, start_link, [stable]},
 			  permanent, 5000, supervisor,
@@ -89,6 +106,11 @@ init(_Args) ->
 			  {meta_data_sender_sup, start_link, [stable_time_functions:export_funcs_and_vals()]},
 			  permanent, 5000, supervisor,
 			  [meta_data_sender_sup]},
+
+    LogResponseReaderSup = {inter_dc_query_response_sup,
+			  {inter_dc_query_response_sup, start_link, [?INTER_DC_QUERY_CONCURRENCY]},
+			  permanent, 5000, supervisor,
+			  [inter_dc_query_response_sup]},
 
 
     {ok,
@@ -107,5 +129,8 @@ init(_Args) ->
        InterDcLogReaderQMaster,
        InterDcLogReaderRMaster,
        InterDcLogSenderMaster,
+       StableMetaData,
        MetaDataManagerSup,
-       MetaDataSenderSup]}}.
+       MetaDataSenderSup,
+       BCounterManager,
+       LogResponseReaderSup]}}.
