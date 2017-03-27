@@ -441,9 +441,9 @@ receive_read_objects_result({ok, {Key, Type, Snapshot}},
       return_accumulator= ReadSet,
       internal_read_set = InternalReadSet}) ->
             %%TODO: type is hard-coded..
-            SnapshotAfterMyUpdates=apply_tx_updates_to_snapshot(Key, CoordState, Type, Snapshot),
+            SnapshotAfterMyUpdates = apply_tx_updates_to_snapshot(Key, CoordState, Type, Snapshot),
             Value2 = Type:value(SnapshotAfterMyUpdates),
-            ReadSet1 = clocksi_static_tx_coord_fsm:replace(ReadSet, Key, Value2),
+            ReadSet1 = replace_first(ReadSet, Key, Value2),
             NewInternalReadSet = orddict:store(Key, Snapshot, InternalReadSet),
             case NumToRead of
                 1 ->
@@ -719,7 +719,12 @@ reply_to_client(SD = #tx_coord_state
                                 {ok, CausalClock}
                         end;
                     aborted ->
-                        {error, {aborted, TxId}};
+                        case ReturnAcc of
+                            {error, Reason} ->
+                              {error, Reason};
+                            _ ->
+                              {error, {aborted, TxId}}
+                        end;
                     Reason ->
                         {TxId, Reason}
                 end,
@@ -800,6 +805,15 @@ wait_for_clock(Clock) ->
             timer:sleep(10),
             wait_for_clock(Clock)
     end.
+
+%% Replaces the first occurrence of an entry;
+%% yields error if there the element to be replaced is not in the list
+replace_first([], _, _) ->
+    error;
+replace_first([Key|Rest], Key, NewKey) ->
+    [NewKey|Rest];
+replace_first([NotMyKey|Rest], Key, NewKey) ->
+    [NotMyKey|replace_first(Rest, Key, NewKey)].
 
 -ifdef(TEST).
 
@@ -898,7 +912,7 @@ read_success_test(Pid) ->
 
 downstream_fail_test(Pid) ->
     fun() ->
-        ?assertMatch({error, {aborted , _}},
+        ?assertMatch({error, _},
             gen_fsm:sync_send_event(Pid, {update, {downstream_fail, nothing, nothing}}, infinity))
     end.
 
